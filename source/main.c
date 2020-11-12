@@ -409,8 +409,8 @@ int main(int argc, char* argv[])
 	
 	if(res){
 		printf("WHAT IS WRONG WITH THE ELF?\n");
-		printf("A: I need my takeover .xml!\n");
-		printf("(hint: sd:/3ds/slotTool/slotTool.xml)\n\n");
+		printf("A: I need cfg:s or cfg:i!\n\n");
+		//printf("(hint: sd:/3ds/slotTool/slotTool.xml)\n\n");
 		printf("Press any key to exit :(\n");
 		fail=1;
 	}

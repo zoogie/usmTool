@@ -13,6 +13,7 @@
 #include "curl.h"
 
 u8 workbuf[0xC00]={0};
+u8 *usmlist;
 const char *yellow="\x1b[33;1m";
 const char *blue="\x1b[34;1m";
 const char *dblue="\x1b[34;0m";
@@ -248,9 +249,16 @@ Result http_download(const char *url, const char *filename, u32 crc)
 Result curl_download(const char *url, const char *filename, u32 crc)
 {
 	Result res;
-	dl_attempt++;
 	
 	printf("\nDownloading %s\n", filename);
+	
+	if(strstr(url, "usmlist.bin")){ //we don't need crc checks if we're downloading list
+		res = downloadToFile(url, filename);
+		if(res) return 2;
+		return 0;
+	}
+	
+	dl_attempt++;  //we don't want this counted if it's a usmlist download, hence going after the usmlist check
 	
 	if(crcFile(filename, crc)==true){
 		printf("Already downloaded\n\n");
@@ -263,9 +271,26 @@ Result curl_download(const char *url, const char *filename, u32 crc)
 		printf("result: %08X\n", (int) res);
 		return 1; 
 	}
+	
+	res = crcFile(filename, crc);
+	if(res==false) { 
+		printf("result: %08X\n", (int) res);
+		return 3; 
+	}
 
 	dl_success++;
 	return 0;
+}
+
+Result getlist(){
+	FILE *f=fopen("/usmlist.bin","rb");
+	if(f){
+		u32 bytesread=fread(usmlist, 1, 0x4200, f);
+		fclose(f);
+		if(bytesread != 0x4100) return 1;
+		return 0;
+	}
+	return 2;
 }
 
 int cursor=0;
@@ -276,6 +301,8 @@ int menu(u32 n){
 	Result res;
 	u8 region=1;
 	u32 lumaconfig[8]={0x464e4f43, 0x00040002, 0, 0, 0, 0x00020100, 0x00040010, 0};
+	char url[0x100]={0};
+	char filepath[0x100]={0};
 	
 	check_slots();
 
@@ -306,28 +333,21 @@ int menu(u32 n){
 		switch(cursor){
 			case 0:
 			dl_attempt=0; dl_success=0;
-			/*    	               not a bad filehost, but probably against TOS
-			http_download("https://cdn.discordapp.com/attachments/777777777777777777/888888888888888888/usm.bin", 			"/usm.bin", 0xc92f4bab);
-			http_download("https://cdn.discordapp.com/attachments/777777777777777777/888888888888888888/boot.firm", 		"/boot.firm", 0x998e0ab2);
-			http_download("https://cdn.discordapp.com/attachments/777777777777777777/888888888888888888/FBI.3dsx", 			"/3DS/FBI.3dsx", 0x0e5ab773);
-			http_download("https://cdn.discordapp.com/attachments/777777777777777777/888888888888888888/Universal-Updater.3dsx", 	"/3DS/Universal-Updater.3dsx", 0xc84a8163);
-			http_download("https://cdn.discordapp.com/attachments/777777777777777777/888888888888888888/boot.3dsx", 		"/temp.3dsx", 0x38d97497);
-			*/
 
+			curl_download("https://github.com/zoogie/usmlist/blob/main/usmlist.bin?raw=true", "/usmlist.bin", 0);
+			res = getlist();
 
-			curl_download("https://github.com/zoogie/unSAFE_MODE/releases/download/v1.2/usm.bin", 						"/usm.bin", 0xc92f4bab);
-			curl_download("https://github.com/hax0kartik/luma-hourlies/releases/download/222-luma3ds-bb07a73/boot.firm",			"/boot.firm", 0xe30c2a11);  //same as 10.2
-			curl_download("https://github.com/zoogie/DSP1/releases/download/v1.0/DSP1.cia", 						"/cias/DSP1.cia", 0xa99d9b1d);
-			curl_download("https://github.com/astronautlevel2/Anemone3DS/releases/download/v2.1.0/Anemone3DS.cia",				"/cias/Anemone3DS.cia", 0xf8cc2e0c);
-			curl_download("https://github.com/Steveice10/FBI/releases/download/2.6.0/FBI.3dsx",						"/3ds/FBI.3dsx", 0x0e5ab773);
-			curl_download("https://github.com/Steveice10/FBI/releases/download/2.6.0/FBI.cia",						"/cias/FBI.cia", 0x7dc5b2b1);
-			curl_download("https://github.com/mariohackandglitch/homebrew_launcher_dummy/releases/download/v1.0/Homebrew_Launcher.cia",	"/cias/Homebrew_Launcher.cia", 0x9f63685c);
-			curl_download("https://github.com/KunoichiZ/lumaupdate/releases/download/v2.5/lumaupdater.cia",					"/cias/lumaupdater.cia", 0x565447ec);
-			curl_download("https://github.com/ihaveamac/ctr-no-timeoffset/releases/download/v1.1/ctr-no-timeoffset.3dsx",			"/3ds/ctr-no-timeoffset.3dsx", 0xad071c54);
-			curl_download("https://3ds.hacks.guide/assets/DO_NOT_LAUNCH.firm",								"/luma/payloads/DO_NOT_LAUNCH.firm", 0x579bc29d);
-			curl_download("https://github.com/FlagBrew/Checkpoint/releases/download/v3.7.4/Checkpoint.cia",					"/cias/Checkpoint.cia", 0x37236806);
-			curl_download("https://github.com/zoogie/GodMode9/releases/download/v1.9.2/GodMode9.firm",					"/luma/payloads/GodMode9.firm", 0x9d3355b1);
-			curl_download("https://github.com/zoogie/GodMode9/releases/download/v1.9.2/GM9Megascript.gm9",					"/gm9/scripts/GM9Megascript.gm9", 0xc021513c);
+			if(res){
+				printf("could not download usmlist.bin %d\n", (int)res);
+				break;
+			}
+			
+			for(int i=0; i<64; i++){
+				if(usmlist[i*0x100] == 0 || usmlist[i*0x100 + 0xC0] == 0) break;
+				snprintf(url, 0xC0, "%s", usmlist + (i*0x100));
+				snprintf(filepath, 0x40, "%s", usmlist + (i*0x100 + 0xC0));
+				curl_download(url, filepath, *(u32*)(usmlist + 0x4000 + (i*4)));
+			}
 			
 			res = _CFGU_SecureInfoGetRegion(&region);
 			if(res) printf("ohno: %08X\n", (int)res);
@@ -388,6 +408,7 @@ int main(int argc, char* argv[])
 
 	Result res;
 	u32 fail=0;
+	usmlist=(u8*)linearAlloc(0x5000);
 	fsInit();
 	mkdir("/3DS", 0777);
 	mkdir("/cias", 0777);
@@ -432,6 +453,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	//free(usmlist);
 	httpcExit();
 	gfxExit();
 	return 0;
